@@ -1,11 +1,11 @@
 package com.github.exper0;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -14,7 +14,10 @@ import java.util.function.Function;
 public class WeightedAverageAllocator<R, D>  implements
     TransportationProblem<WeightedAverageAllocator.A<R>,WeightedAverageAllocator.A<D>, WeightedAverageAllocator.Holder> {
     private static final int SIZE = 128;
-    private static final int PRECISION = 12;
+    private static final int PRECISION = 15;
+    private static final int ROUNDING = BigDecimal.ROUND_HALF_UP;
+//    private final Map<D, IntHolder> remainingDemands = new HashMap<D, IntHolder>(SIZE);
+//    private final Map<R, IntHolder> remainingResources = new HashMap<R, IntHolder>(SIZE);
 
     public Collection<Allocation<R, D>> allocate(
         Collection<R> resources,
@@ -23,15 +26,25 @@ public class WeightedAverageAllocator<R, D>  implements
         Function<R, Integer> rq,
         Function<D, Integer> dq) {
         int total = resources.stream().mapToInt(rq::apply).sum();
+        BigDecimal sum = resources.stream().map(r->rv.apply(r).multiply(new BigDecimal(rq.apply(r)))).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal average = sum.divide(new BigDecimal(total), PRECISION, ROUNDING);
         Table<A<R>, A<D>, Holder> matrix = HashBasedTable.create(SIZE, SIZE);
         for (D demand: demands) {
-            int remainingDemand = dq.apply(demand);
+            A<D> wrappedDemand = new A<D>(demand, dq.apply(demand));
+            Map<A<R>, Holder> remainingResources = matrix.column(wrappedDemand);
             for (R resource: resources) {
+                A<R> wrappedResource = new A<R>(resource, rq.apply(resource));
                 BigDecimal priceLevel = rv.apply(resource);
-                Integer quantity = rq.apply(resource);
-                BigDecimal roundedVal = new BigDecimal(remainingDemand * ((double)quantity / total)).setScale(0, BigDecimal.ROUND_DOWN);
+                BigDecimal roundedVal = new BigDecimal(wrappedDemand.quantity * ((double)wrappedResource.quantity / total)).setScale(0, BigDecimal.ROUND_DOWN);
+                Holder holder = new Holder();
+                holder.penalty = priceLevel.subtract(average).divide(new BigDecimal(wrappedResource.quantity), PRECISION, ROUNDING);
+                holder.roundedValue = roundedVal.intValue();
+                wrappedDemand.allocate(holder.roundedValue);
+                wrappedResource.allocate(holder.roundedValue);
+                remainingResources.put(wrappedResource, holder);
             }
         }
+        return null;
     }
 
     @Override
@@ -48,11 +61,18 @@ public class WeightedAverageAllocator<R, D>  implements
 
     static class A<T> {
         final T item;
-        int toBeAllocated;
+        final int quantity;
+        int remaining;
 
-        public W(T item, int toBeAllocated) {
+        public A(T item, int quantity) {
             this.item = item;
-            this.toBeAllocated = toBeAllocated;
+            this.quantity = quantity;
+            this.remaining = quantity;
+        }
+
+        public int allocate(int amount) {
+            this.remaining -= amount;
+            return this.remaining;
         }
 
         @Override

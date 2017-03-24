@@ -1,0 +1,22 @@
+- resources:
+    - value: 556
+      quantity: 13
+    - value: 557
+      quantity: 11
+    - value: 558
+      quantity: 17
+    - value: 559
+      quantity: 16
+    - value: 560
+      quantity: 14
+    - value: 570
+      quantity: 20
+  demands:
+    - quantity: 50
+    - quantity: 7
+    - quantity: 5
+    - quantity: 7
+    - quantity: 4
+    - quantity: 8
+    - quantity: 5
+    - quantity: 5
